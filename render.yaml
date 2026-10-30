@@ -1,0 +1,21 @@
+# Optional: lets Render create the service for you (New + > Blueprint).
+services:
+  - type: web
+    name: face-attendance
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: ADMIN_PASSWORD        # first admin login: User ID "admin" and this password
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL   # optional: encrypted cloud copy so data survives restarts
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: BACKUP_KEY            # write this down: the cloud copy cannot be opened without it
+        sync: false
