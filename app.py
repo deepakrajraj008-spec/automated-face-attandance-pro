@@ -1481,10 +1481,22 @@ def index():
 
 @app.get("/manifest.webmanifest")
 def manifest():
-    data = {"name": "Face Attendance", "short_name": "Attendance", "start_url": "/", "scope": "/", "display": "standalone",
+    data = {"id": "/", "name": "Face Attendance", "short_name": "Attendance", "description": "Face recognition attendance with entry and exit times and leave.",
+            "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "lang": "en", "categories": ["education", "productivity"],
             "background_color": "#f4f5f8", "theme_color": "#4f46e5",
-            "icons": [{"src": f"/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png", "purpose": "any maskable"} for n in ICONS]}
+            "icons": [{"src": f"/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png", "purpose": "any maskable"} for n in ICONS],
+            "shortcuts": [{"name": "Live camera", "url": "/#/live"}, {"name": "My attendance", "url": "/#/me"}, {"name": "Leave", "url": "/#/leaves"}]}
     return Response(json.dumps(data), mimetype="application/manifest+json")
+
+
+@app.get("/.well-known/assetlinks.json")
+def assetlinks():
+    """Lets an Android app made from this site (PWABuilder / Bubblewrap) open it without a browser address bar."""
+    pkg = os.environ.get("ANDROID_PACKAGE", "").strip()
+    prints = [x.strip() for x in os.environ.get("ANDROID_SHA256", "").split(",") if x.strip()]
+    data = [{"relation": ["delegate_permission/common.handle_all_urls"],
+             "target": {"namespace": "android_app", "package_name": pkg, "sha256_cert_fingerprints": prints}}] if pkg and prints else []
+    return Response(json.dumps(data), mimetype="application/json")
 
 
 @app.get("/sw.js")

@@ -96,6 +96,18 @@ How it behaves:
 - Upstash free plan: 256 MB and 500,000 commands a month. This app uses a few commands per save.
 - The **Download backup** button in Settings is still there as a second safety net.
 
+## On a phone
+
+- **Install it like an app (free, works now).** Open your address in the phone's browser. Android Chrome: tap **Install** on the
+  banner, or the menu then **Install app**. iPhone Safari: tap **Share** then **Add to Home Screen**. It then opens full screen
+  with its own icon. The live camera has a **Flip camera** button for the back camera.
+- **Real Android app file (optional).** Go to pwabuilder.com, enter your address, choose **Package for Android**, and download the
+  package. Then set `ANDROID_PACKAGE` (the package name you chose) and `ANDROID_SHA256` (the fingerprint PWABuilder shows you) on the
+  server so the app opens without a browser address bar. The `.apk` can be installed directly; the Play Store needs a
+  one-time 25 USD developer fee.
+- **iPhone app store.** Apple needs a paid developer account (99 USD a year) and often rejects apps that only wrap a website.
+  Adding the site to the Home Screen is the practical choice.
+
 ## Files
 
 `app.py` the server, `templates/index.html` and `static/` the screens, `data/` the database (created on first run).

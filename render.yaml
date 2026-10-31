@@ -19,3 +19,7 @@ services:
         sync: false
       - key: BACKUP_KEY            # write this down: the cloud copy cannot be opened without it
         sync: false
+      - key: ANDROID_PACKAGE        # optional: only if you make an Android app file with PWABuilder
+        sync: false
+      - key: ANDROID_SHA256
+        sync: false
