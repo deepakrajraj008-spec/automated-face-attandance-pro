@@ -21,13 +21,6 @@ p{margin:0}a{color:var(--acc)}
 .head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
 .who{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .who b{font-weight:600}
-@media(max-width:860px){
- .shell{grid-template-columns:1fr}
- .side{position:fixed;inset:auto 0 0 0;height:auto;flex-direction:row;padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:30;border-right:0;border-top:1px solid var(--line);overflow-x:auto}
- .brand,.side .install{display:none}
- .nav{flex-direction:row;gap:2px;width:100%}.nav a{flex-direction:column;gap:2px;padding:6px 10px;font-size:11px;min-width:64px;text-align:center}
- .main{padding-bottom:96px}
-}
 /* parts */
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
 .card+.card{margin-top:14px}.grid>.card+.card,.split>.card+.card{margin-top:0}
@@ -88,10 +81,85 @@ dialog.wide{width:min(96vw,760px)}dialog::backdrop{background:rgba(10,12,18,.55)
 .toast.ok{background:var(--ok);color:#fff}.toast.bad{background:var(--bad);color:#fff}
 @media print{.side,.head,#toasts,.dlg-f{display:none!important}dialog{box-shadow:none;border:0}}
 
+
+/* ---------- shared bits ---------- */
+:root{--bar:#4f46e5}
+@media(prefers-color-scheme:dark){:root{--bar:#272459}}
+.avbtn{display:none}
+.seg{display:flex;gap:4px;padding:4px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.seg button{flex:1;font:inherit;font-weight:600;padding:9px 6px;border:0;border-radius:9px;background:transparent;color:var(--mut);cursor:pointer}
+.seg button.on{background:var(--card);color:var(--acc);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.loading{display:flex;justify-content:center;padding:36px 0}
+.spin{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--acc);animation:spin .7s linear infinite}
+.sheet-list a{display:flex;align-items:center;gap:16px;padding:15px 4px;color:var(--ink);text-decoration:none;font-weight:600;border-top:1px solid var(--line)}
+.sheet-list a:first-child{border-top:0}.sheet-list svg{width:22px;height:22px;stroke:var(--acc);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes sheetUp{from{transform:translateY(36px);opacity:0}to{transform:none;opacity:1}}
+.page>*{animation:fadeIn .2s ease both}
+
+/* ---------- phone: behave like an Android app ---------- */
 @media(max-width:860px){
- input,select,textarea{font-size:16px}          /* stops iPhone zooming in when a box is tapped */
- .btn{padding:10px 16px}.btn.sm{padding:8px 12px}
- .head h1{font-size:20px}
- .stat .n{font-size:24px}
- .cam{max-height:56vh}
+  html,body{overscroll-behavior-y:contain}
+  body{-webkit-tap-highlight-color:transparent}
+  .btn,.nav a,.seg button,.avbtn{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+  .btn:active,.seg button:active,.nav a:active,.avbtn:active{opacity:.7;transform:scale(.97)}
+  input,select,textarea{font-size:16px;padding:12px}
+  .shell{display:block}
+  .main{padding:0 0 calc(92px + env(safe-area-inset-bottom));max-width:none}
+  .page{padding:14px}
+  /* top app bar */
+  .head{position:sticky;top:0;z-index:25;margin:0;padding:calc(10px + env(safe-area-inset-top)) 16px 12px;background:var(--bar);color:#fff;display:flex;flex-wrap:nowrap;gap:10px;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+  .head h1{flex:1;min-width:0;font-size:20px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .head .who{display:none}
+  .avbtn{display:flex;width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.22);color:#fff;font:700 14px system-ui,sans-serif;align-items:center;justify-content:center;flex:none;cursor:pointer}
+  /* bottom navigation bar */
+  .side{position:fixed;left:0;right:0;bottom:0;top:auto;height:auto;flex-direction:row;padding:6px 4px calc(6px + env(safe-area-inset-bottom));z-index:30;border:0;border-top:1px solid var(--line);background:var(--card);box-shadow:0 -2px 14px rgba(0,0,0,.08);overflow:visible;gap:0}
+  .brand,.side .install{display:none}
+  .nav{flex:1;flex-direction:row;gap:0;width:100%}
+  .nav a{flex:1 1 0;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:2px 0;font-size:11.5px;font-weight:600;color:var(--mut);background:none!important;text-align:center;border-radius:0}
+  .nav a svg{width:24px;height:24px;padding:4px 18px;box-sizing:content-box;border-radius:16px;transition:background .15s}
+  .nav a.on{color:var(--acc)}.nav a.on svg{background:var(--soft)}
+  .nav a span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  /* cards and grids */
+  .card{border-radius:16px;padding:14px;box-shadow:none}
+  .grid.g2,.split{grid-template-columns:1fr}
+  .stat .n{font-size:24px}
+  .cam{max-height:58vh;border-radius:14px}
+  .note{font-size:14px}
+  /* dialogs become bottom sheets */
+  dialog,dialog.wide{width:100%;max-width:none;margin:auto 0 0;border-radius:24px 24px 0 0;max-height:92vh;border-bottom:0;animation:sheetUp .22s ease-out}
+  .dlg-h{position:relative;padding-top:24px}
+  .dlg-h::before{content:"";position:absolute;top:9px;left:50%;width:38px;height:4px;border-radius:2px;background:var(--line);transform:translateX(-50%)}
+  .dlg-b{max-height:calc(92vh - 160px)}
+  .dlg-f{padding-bottom:calc(16px + env(safe-area-inset-bottom))}.dlg-f .btn{flex:1 1 40%}
+  /* tables become lists of cards */
+  .tablewrap{overflow:visible;margin:0}
+  table,thead,tbody,tr,td{display:block;width:100%}
+  tr.hdr{display:none}
+  tr{border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:10px;background:var(--card)}
+  td{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border:0;text-align:right}
+  td::before{content:attr(data-label);color:var(--mut);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;text-align:left;flex:none}
+  td:first-child{text-align:left;font-weight:600;justify-content:flex-start;padding-bottom:8px}td:first-child::before{display:none}
+  td:empty{display:none}
+  td.act{justify-content:flex-start;flex-wrap:wrap;gap:8px;margin-top:6px;padding-top:12px;border-top:1px solid var(--line);text-align:left}td.act::before{display:none}
+  td.act .btn+.btn{margin-left:0}
+  /* floating action button */
+  .fab{position:fixed;right:16px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:26;border-radius:16px;padding:14px 20px;font-size:15px;box-shadow:0 8px 20px rgba(79,70,229,.45)}
+  /* sign-in fills the screen */
+  .auth{align-items:start;padding:0}.auth .card{width:100%;min-height:100vh;border:0;border-radius:0;box-shadow:none;padding:44px 22px}
+  #toasts{left:12px;right:12px;top:auto;bottom:calc(96px + env(safe-area-inset-bottom));max-width:none}
+}
+
+@media(max-width:860px){
+  /* a list page: the outer card disappears so each row is its own card, not a card inside a card */
+  .card:has(> .tablewrap),.card:has(> div > .tablewrap){background:none;border:0;padding:0}
+  .card:has(> .tablewrap)>.row,.card:has(> div > .tablewrap)>.row{margin-bottom:12px!important}
+  /* small lists without column headings (for example the dashboard) stay simple rows */
+  table.plain tr{display:flex;align-items:center;justify-content:space-between;gap:12px;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:10px 0;margin:0;background:none}
+  table.plain tr:last-child{border-bottom:0}
+  table.plain td{display:block;width:auto;padding:0}
+  table.plain td::before{display:none}
+  table.plain td.act{border:0;margin:0;padding:0;margin-left:auto}
+  .ring{margin:0 auto}
 }

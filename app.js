@@ -29,6 +29,7 @@ const ICONS = {
   report: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/>',
+  more: '<circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>',
   cog: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
 };
 const put = (parent, ...kids) => parent.append(...kids.flat(Infinity).filter(k => k != null && k !== false));
@@ -268,7 +269,7 @@ const PAGES = [
   { id: "settings", title: "Settings", icon: "cog", any: ["manage_settings"], fn: pageSettings },
 ];
 let installPrompt = null;
-const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || document.referrer.startsWith("android-app://");
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; const b = $("#installBtn"); if (b) b.hidden = false; const tip = $("#installTip"); if (tip && tip._update) tip._update(); });
 function installTip() {
@@ -305,19 +306,52 @@ function render() {
   }
   const wanted = (location.hash || "").replace(/^#\/?/, "");
   const page = pages.find(p => p.id === wanted) || pages[0];
-  const content = h("div", {});
+  const phone = window.matchMedia("(max-width: 860px)").matches;
+  const content = h("div", { class: "page" });
   const tip = installTip();
   if (tip) content.append(tip);
-  const nav = h("nav", { class: "nav" }, pages.map(p => h("a", { href: "#/" + p.id, class: p.id === page.id ? "on" : "" }, icon(p.icon), h("span", { text: p.title }))));
+  const spinner = h("div", { class: "loading" }, h("div", { class: "spin" }));
+  content.append(spinner);
+  const shown = phone && pages.length > 5 ? pages.slice(0, 4) : pages, rest = phone && pages.length > 5 ? pages.slice(4) : [];
+  const link = p => h("a", { href: "#/" + p.id, class: p.id === page.id ? "on" : "" }, icon(p.icon), h("span", { text: p.title }));
+  const nav = h("nav", { class: "nav" }, shown.map(link),
+    rest.length ? h("a", { href: "#", class: rest.some(p => p.id === page.id) ? "on" : "", onclick: ev => { ev.preventDefault(); moreSheet(rest); } }, icon("more"), h("span", { text: "More" })) : null);
   const side = h("aside", { class: "side" }, h("div", { class: "brand" }, h("img", { src: "/icon-192.png", alt: "" }), h("span", { text: S.org })), nav,
     h("button", { id: "installBtn", class: "btn ghost sm install", hidden: !installPrompt, text: "Install app", onclick: async () => { if (installPrompt) { installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $("#installBtn").hidden = true; } } }));
   const head = h("div", { class: "head" }, h("h1", { text: page.title }),
     h("div", { class: "who right" }, h("b", { text: S.me.name }), badge(S.me.role, "acc"),
-      h("button", { class: "btn ghost sm", text: "Password", onclick: passwordDialog }), h("button", { class: "btn ghost sm", text: "Log out", onclick: logout })));
+      h("button", { class: "btn ghost sm", text: "Password", onclick: passwordDialog }), h("button", { class: "btn ghost sm", text: "Log out", onclick: logout })),
+    h("button", { class: "avbtn", "aria-label": "Account", text: initials(S.me.name), onclick: accountSheet }));
   app.append(h("div", { class: "shell" }, side, h("main", { class: "main" }, head, content)));
-  page.fn(content).catch(fail);
+  page.fn(content).catch(fail).finally(() => spinner.remove());
 }
 window.addEventListener("hashchange", render);
+window.matchMedia("(max-width: 860px)").addEventListener("change", render);
+
+function moreSheet(rest) {
+  let ref;
+  ref = openDialog("More", h("div", { class: "sheet-list" }, rest.map(p => h("a", { href: "#/" + p.id, onclick: () => ref.close() }, icon(p.icon), h("span", { text: p.title })))), []);
+}
+function accountSheet() {
+  openDialog("Account", h("div", {}, h("div", { class: "person", style: "margin-bottom:6px" }, h("span", { class: "av", text: initials(S.me.name) }),
+    h("div", {}, h("div", { text: S.me.name }), h("div", { class: "small mut", text: S.me.user_id + "  \u00b7  " + S.me.role })))), [
+    { label: "Change password", kind: "ghost", run: () => { setTimeout(passwordDialog, 60); } },
+    { label: "Log out", kind: "danger", run: () => { setTimeout(logout, 60); } },
+  ]);
+}
+
+/* On a phone every table is shown as a list of cards. This copies each column heading onto its cells. */
+function mobilizeTables() {
+  document.querySelectorAll("table").forEach(tb => {
+    const rows = [...tb.querySelectorAll("tr")], head = rows.find(r => r.querySelector("th"));
+    if (!head) { tb.classList.add("plain"); return; }
+    head.classList.add("hdr");
+    const labels = [...head.children].map(c => c.textContent.trim());
+    rows.forEach(r => { if (r !== head) [...r.children].forEach((td, i) => { if (labels[i] && td.dataset.label !== labels[i]) td.dataset.label = labels[i]; }); });
+  });
+}
+let mobPending = false;
+new MutationObserver(() => { if (!mobPending) { mobPending = true; requestAnimationFrame(() => { mobPending = false; mobilizeTables(); }); } }).observe(document.getElementById("app"), { childList: true, subtree: true });
 
 async function logout() { try { await api("/api/logout", { body: {} }); } catch (e) { /* ignore */ } S.me = null; S.csrf = null; location.hash = ""; await loadMe().catch(() => {}); render(); }
 
@@ -370,14 +404,18 @@ async function pageMe(root) {
   put(root, h("div", { class: "card" }, h("h2", { text: d.student.name + (d.student.roll ? "  (" + d.student.roll + ")" : "") }),
     h("div", { class: "row small mut", style: "margin:4px 0 14px" }, (d.student.branch ? d.student.branch + "  \u00b7  " : "") + "Counting since " + niceDate(d.start)),
     h("div", { class: "big" + (t && t.status === "present" ? " ok" : ""), style: "margin-bottom:14px" }, h("div", {}, h("b", { text: "Today: " }), t ? [statusBadge(t.status), "  Entry ", t12(t.entry), "   Exit ", t12(t.exit)] : "-")),
-    summaryView(d)));
+    summaryView(d)),
+    can("apply_leave") ? h("a", { class: "btn fab", href: "#/leaves", text: "Apply for leave" }) : null);
 }
 
 /* ---------------- live attendance camera ---------------- */
 function modePicker(onchange) {
-  return h("select", { onchange: e => onchange(e.target.value), "aria-label": "Mode" },
-    h("option", { value: "auto", text: "Auto: first sighting is entry, a later one is exit" }),
-    h("option", { value: "entry", text: "Entry only" }), h("option", { value: "exit", text: "Exit only" }));
+  const seg = h("div", { class: "seg", role: "group", "aria-label": "Mode" });
+  [["auto", "Auto"], ["entry", "Entry"], ["exit", "Exit"]].forEach(([v, l]) => {
+    const b = h("button", { type: "button", text: l, class: v === "auto" ? "on" : "", onclick: () => { seg.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); onchange(v); } });
+    seg.append(b);
+  });
+  return h("div", {}, seg, h("div", { class: "small mut", style: "margin-top:6px", text: "Auto: the first sighting is the entry, a later one is the exit." }));
 }
 function eventSayer(banner, refresh) {
   const shown = {};
@@ -390,7 +428,7 @@ function eventSayer(banner, refresh) {
       if (shown[key] && now - shown[key] < 10000) continue;
       if (!success && now < holdUntil) continue;
       shown[key] = now;
-      if (success) holdUntil = now + 6000;
+      if (success) { holdUntil = now + 6000; if (navigator.vibrate) navigator.vibrate(80); }
       if (e.type === "entry") { say("ok", h("b", { text: e.name }), " entered at " + t12(e.time)); toast(`${e.name}: entry ${t12(e.time)}`, "ok"); }
       else if (e.type === "exit") { say("ok", h("b", { text: e.name }), " left at " + t12(e.time)); toast(`${e.name}: exit ${t12(e.time)}`, "ok"); }
       else if (e.type === "already") say("", h("b", { text: e.name }), " is already marked (entry " + t12(e.time) + ").");
@@ -551,7 +589,7 @@ async function pageStudents(root) {
   }
   put(root, h("div", { class: "card" }, h("div", { class: "row", style: "margin-bottom:12px" }, search, count, trainedBadge,
     h("span", { class: "right row" }, edit ? [h("button", { class: "btn ghost", text: "Train model", onclick: async () => { try { const r = await api("/api/train", { body: {}, timeout: 240000 }); toast(r.msg, r.ok ? "ok" : ""); await load(); } catch (e) { fail(e); } } }),
-      h("button", { class: "btn", text: "Add student", onclick: addDialog })] : null)), body));
+      h("button", { class: "btn fab", text: "+ Add student", onclick: addDialog })] : null)), body));
   await load();
 }
 
@@ -702,7 +740,7 @@ async function pageUsers(root) {
         h("td", { class: "act" }, h("button", { class: "btn ghost sm", text: "Access", onclick: () => editDialog(u) }), h("button", { class: "btn ghost sm", text: "Reset password", onclick: () => reset(u).catch(fail) }),
           u.user_id === S.me.user_id ? null : h("button", { class: "btn danger sm", text: "Delete", onclick: () => remove(u).catch(fail) })))))));
   }
-  put(root, h("div", { class: "card" }, h("div", { class: "row", style: "margin-bottom:12px" }, h("h2", { text: "Everyone who can sign in" }), h("button", { class: "btn right", text: "Add user", onclick: addDialog })),
+  put(root, h("div", { class: "card" }, h("div", { class: "row", style: "margin-bottom:12px" }, h("h2", { text: "Everyone who can sign in" }), h("button", { class: "btn fab", text: "+ Add user", onclick: addDialog })),
     h("p", { class: "small mut", style: "margin-bottom:10px", text: "Each person has a User ID and a password. Passwords are stored scrambled, so they cannot be read back. When you add someone, or reset a password, the new password is shown once for you to hand over." }), body));
   await load();
 }
