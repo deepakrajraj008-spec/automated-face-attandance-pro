@@ -383,7 +383,7 @@ async function pageDashboard(root) {
       h("div", { class: "card" }, h("h2", { text: "Below 75% attendance" }),
         d.low.length ? h("div", { class: "tablewrap" }, h("table", {}, d.low.map(s => h("tr", {}, h("td", {}, h("div", { class: "person" }, h("span", { class: "av", text: initials(s.name) }), h("div", {}, h("div", { text: s.name }), h("div", { class: "small mut", text: s.roll })))), h("td", { class: "act" }, badge(s.percent + "%", "bad")))))) : h("div", { class: "empty", text: "Everyone is at 75% or above." })),
       h("div", { class: "card" }, h("h2", { text: "Recent activity" }),
-        d.recent.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Name", "Date", "Entry", "Exit"].map(x => h("th", { text: x }))), d.recent.map(r => h("tr", {}, h("td", { text: r.name }), h("td", { text: niceDate(r.date) }), h("td", { text: t12(r.entry) }), h("td", { text: t12(r.exit) }))))) : h("div", { class: "empty", text: "No attendance yet." }))));
+        d.recent.length ? h("div", { class: "tablewrap" }, h("table", {}, d.recent.map(r => h("tr", {}, h("td", {}, h("div", { text: r.name }), h("div", { class: "small mut", text: niceDate(r.date) })), h("td", { class: "act", text: t12(r.entry) + " - " + t12(r.exit) }))))) : h("div", { class: "empty", text: "No attendance yet." }))));
 }
 
 /* ---------------- a student's own page ---------------- */
@@ -607,7 +607,7 @@ async function pageReports(root) {
     csv.href = "/api/attendance/export.csv?" + query();
     info.textContent = `${d.rows.length} row(s) from ${niceDate(d.start)} to ${niceDate(d.end)}`;
     body.replaceChildren(d.rows.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Date", "Student", "Branch", "Entry", "Exit", "Time in", "Status", ""].map(x => h("th", { text: x }))),
-      d.rows.map(r => h("tr", {}, h("td", { class: "nowrap", text: niceDate(r.date) }), h("td", {}, h("div", { text: r.name }), h("div", { class: "small mut", text: r.roll })), h("td", { text: r.branch || "-" }),
+      d.rows.map(r => h("tr", {}, h("td", { class: "nowrap", text: niceDate(r.date) }), h("td", {}, h("div", { class: "who2" }, h("div", { text: r.name }), h("div", { class: "small mut", text: r.roll }))), h("td", { text: r.branch || "-" }),
         h("td", { text: t12(r.entry) }), h("td", { text: t12(r.exit) }), h("td", { text: r.duration || "-" }), h("td", {}, statusBadge(r.status)),
         h("td", { class: "act" }, edit ? [h("button", { class: "btn ghost sm", text: "Edit", onclick: () => manual(r) }),
           r.entry ? h("button", { class: "btn danger sm", text: "Remove", onclick: async () => { if (await confirmBox("Remove attendance", `Remove ${r.name}'s record for ${niceDate(r.date)}?`, "Remove")) { await api(`/api/attendance/${r.student_id}/${r.date}`, { method: "DELETE" }); load().catch(fail); } } }) : null] : null))))) : h("div", { class: "empty", text: "No rows for these filters." }));
@@ -621,7 +621,7 @@ async function pageReports(root) {
       { label: "Save", run: async () => { await api("/api/attendance/manual", { body: { student_id: +sel.value, date: dt.value, entry: en.value, exit: ex.value } }); toast("Saved", "ok"); await load(); } },
     ]);
   }
-  put(root, h("div", { class: "card" }, h("div", { class: "fields" }, field("From", f.from), field("To", f.to), field("Search", f.search), field("Branch", f.branch), field("Status", f.status)),
+  put(root, h("div", { class: "card" }, h("div", { class: "fields filters" }, field("From", f.from), field("To", f.to), field("Search", f.search), field("Branch", f.branch), field("Status", f.status)),
     h("div", { class: "row", style: "margin-bottom:12px" }, h("button", { class: "btn", text: "Show", onclick: () => load().catch(fail) }), csv,
       edit ? h("button", { class: "btn ghost", text: "Add or correct attendance", onclick: () => manual(null) }) : null, h("span", { class: "right" }, info)), body));
   if (edit) students = (await api("/api/students")).students.filter(s => s.active);

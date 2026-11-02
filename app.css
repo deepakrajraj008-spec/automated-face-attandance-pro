@@ -163,3 +163,10 @@ dialog.wide{width:min(96vw,760px)}dialog::backdrop{background:rgba(10,12,18,.55)
   table.plain td.act{border:0;margin:0;padding:0;margin-left:auto}
   .ring{margin:0 auto}
 }
+
+.who2{display:block}
+@media(max-width:860px){
+  .fields.filters{grid-template-columns:1fr 1fr;gap:0 10px}
+  .fields.filters .field{margin-bottom:8px}
+  td .who2{text-align:right}
+}
