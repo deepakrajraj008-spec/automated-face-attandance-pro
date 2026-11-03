@@ -98,13 +98,26 @@ How it behaves:
 
 ## On a phone
 
+The screens follow Android's Material 3 design when the app is opened on a phone or installed from the APK: top app bar, bottom
+navigation bar, extended floating button, switches, bottom sheets, snackbar messages, ripple on touch, pull down to refresh, and
+the Android Back button (it closes a sheet first, then returns to the first tab, then leaves the app). Light and dark follow the phone.
+
 - **Install it like an app (free, works now).** Open your address in the phone's browser. Android Chrome: tap **Install** on the
   banner, or the menu then **Install app**. iPhone Safari: tap **Share** then **Add to Home Screen**. It then opens full screen
   with its own icon. The live camera has a **Flip camera** button for the back camera.
-- **Real Android app file (optional).** Go to pwabuilder.com, enter your address, choose **Package for Android**, and download the
-  package. Then set `ANDROID_PACKAGE` (the package name you chose) and `ANDROID_SHA256` (the fingerprint PWABuilder shows you) on the
-  server so the app opens without a browser address bar. The `.apk` can be installed directly; the Play Store needs a
-  one-time 25 USD developer fee.
+- **Real Android app file (optional).** Do this only after the site is online and `https://YOUR-SITE/manifest.webmanifest` opens.
+  1. Go to pwabuilder.com, enter your address, press **Start**, then **Package for stores > Android**.
+  2. Choose the output you need:
+     - **Other Android** (or "Sideload") gives an **.apk** you can install directly on phones.
+     - **Google Play** gives an **.aab** bundle. It cannot be installed directly; it is only for uploading to the Play Store.
+  3. Keep **Signing key: Create new** and download the zip. Unzip it. It holds the `.apk`, the `.aab`, `signing.keystore`,
+     `signing-key-info.txt` and `assetlinks.json`. **Keep the keystore and its passwords safe**; you need them for every update.
+  4. Open `signing-key-info.txt` and copy the **SHA-256 fingerprint**. On the server set `ANDROID_PACKAGE` (the Package ID you typed
+     in PWABuilder) and `ANDROID_SHA256` (that fingerprint; with or without colons is fine; separate several with commas).
+     Redeploy, then check that `https://YOUR-SITE/.well-known/assetlinks.json` shows them.
+  5. Install the `.apk`. If a browser address bar still shows at the top, the package name or fingerprint does not match yet.
+     If you use Play App Signing, also add the fingerprint Play Console shows, separated by a comma.
+  The Play Store needs a one-time 25 USD developer fee.
 - **iPhone app store.** Apple needs a paid developer account (99 USD a year) and often rejects apps that only wrap a website.
   Adding the site to the Home Screen is the practical choice.
 

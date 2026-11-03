@@ -29,6 +29,7 @@ const ICONS = {
   report: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
   more: '<circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>',
   cog: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
 };
@@ -81,9 +82,13 @@ async function api(path, opt = {}) {
 }
 
 function toast(msg, kind) {
-  const t = h("div", { class: "toast " + (kind || ""), text: msg });
-  $("#toasts").append(t);
-  setTimeout(() => t.remove(), kind === "bad" ? 6000 : 3500);
+  const t = h("div", { class: "toast " + (kind || ""), role: "status" }, h("span", { class: "tmsg", text: msg }));
+  const drop = () => { t.classList.add("out"); setTimeout(() => t.remove(), 180); };
+  if (kind === "bad") t.append(h("button", { class: "tact", text: "OK", onclick: drop }));
+  const box = $("#toasts");
+  while (box.children.length >= 2) box.firstChild.remove();
+  box.append(t);
+  setTimeout(drop, kind === "bad" ? 6000 : 3200);
 }
 const fail = e => toast(e.message || String(e), "bad");
 
@@ -101,10 +106,21 @@ function openDialog(title, body, actions = [], opts = {}) {
       btn.disabled = false;
     },
   })));
-  dlg.append(h("div", { class: "dlg-h" }, h("h2", { text: title }), h("button", { class: "btn ghost sm right", "aria-label": "Close", text: "\u2715", onclick: close })),
+  dlg.append(h("div", { class: "dlg-h" }, h("h2", { text: title }), h("button", { class: "btn ghost sm right dlg-x", "aria-label": "Close", text: "\u2715", onclick: close })),
     h("div", { class: "dlg-b" }, body), foot);
   document.body.append(dlg);
   dlg.showModal();
+  /* Android Back closes the sheet instead of leaving the page */
+  const mark = { dlg: true };
+  history.pushState(mark, "");
+  const onPop = () => { const all = [...document.querySelectorAll("dialog[open]")]; if (dlg.open && all[all.length - 1] === dlg) { dlg._byBack = true; dlg.close(); } };
+  window.addEventListener("popstate", onPop);
+  dlg.addEventListener("close", () => {
+    window.removeEventListener("popstate", onPop);
+    if (!dlg._byBack && history.state === mark) history.back();
+  });
+  /* tap on the dimmed area closes it, like a modal bottom sheet */
+  dlg.addEventListener("click", ev => { if (ev.target === dlg) close(); });
   return { dlg, close };
 }
 function confirmBox(title, text, label = "Delete") {
@@ -258,18 +274,18 @@ function authScreen(setup) {
 
 /* ---------------- shell, navigation ---------------- */
 const PAGES = [
-  { id: "dashboard", title: "Dashboard", icon: "grid", any: ["view_reports", "take_attendance", "manage_leaves", "manage_students"], fn: pageDashboard },
-  { id: "me", title: "My attendance", icon: "user", any: ["view_own"], student: true, fn: pageMe },
-  { id: "live", title: "Live camera", icon: "camera", any: ["take_attendance"], fn: pageLive },
-  { id: "checkin", title: "My check-in", icon: "scan", any: ["self_checkin"], student: true, fn: pageCheckin },
-  { id: "students", title: "Students", icon: "users", any: ["manage_students", "view_reports"], fn: pageStudents },
-  { id: "reports", title: "Reports", icon: "report", any: ["view_reports"], fn: pageReports },
-  { id: "leaves", title: "Leave", icon: "calendar", any: ["manage_leaves", "apply_leave"], fn: pageLeaves },
-  { id: "users", title: "Users & access", icon: "key", any: ["manage_users"], fn: pageUsers },
-  { id: "settings", title: "Settings", icon: "cog", any: ["manage_settings"], fn: pageSettings },
+  { id: "dashboard", short: "Home", title: "Dashboard", icon: "grid", any: ["view_reports", "take_attendance", "manage_leaves", "manage_students"], fn: pageDashboard },
+  { id: "me", short: "Attendance", title: "My attendance", icon: "user", any: ["view_own"], student: true, fn: pageMe },
+  { id: "live", short: "Camera", title: "Live camera", icon: "camera", any: ["take_attendance"], fn: pageLive },
+  { id: "checkin", short: "Check-in", title: "My check-in", icon: "scan", any: ["self_checkin"], student: true, fn: pageCheckin },
+  { id: "students", short: "Students", title: "Students", icon: "users", any: ["manage_students", "view_reports"], fn: pageStudents },
+  { id: "reports", short: "Reports", title: "Reports", icon: "report", any: ["view_reports"], fn: pageReports },
+  { id: "leaves", short: "Leave", title: "Leave", icon: "calendar", any: ["manage_leaves", "apply_leave"], fn: pageLeaves },
+  { id: "users", short: "Users", title: "Users & access", icon: "key", any: ["manage_users"], fn: pageUsers },
+  { id: "settings", short: "Settings", title: "Settings", icon: "cog", any: ["manage_settings"], fn: pageSettings },
 ];
 let installPrompt = null;
-const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || document.referrer.startsWith("android-app://");
+const isStandalone = () => /FaceAttendanceApp/.test(navigator.userAgent) || window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || document.referrer.startsWith("android-app://");
 const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installPrompt = e; const b = $("#installBtn"); if (b) b.hidden = false; const tip = $("#installTip"); if (tip && tip._update) tip._update(); });
 function installTip() {
@@ -313,7 +329,7 @@ function render() {
   const spinner = h("div", { class: "loading" }, h("div", { class: "spin" }));
   content.append(spinner);
   const shown = phone && pages.length > 5 ? pages.slice(0, 4) : pages, rest = phone && pages.length > 5 ? pages.slice(4) : [];
-  const link = p => h("a", { href: "#/" + p.id, class: p.id === page.id ? "on" : "" }, icon(p.icon), h("span", { text: p.title }));
+  const link = p => h("a", { href: "#/" + p.id, class: p.id === page.id ? "on" : "", "aria-current": p.id === page.id ? "page" : null, onclick: ev => tabGo(ev, p, pages[0]) }, icon(p.icon), h("span", { class: "t-full", text: p.title }), h("span", { class: "t-short", text: p.short || p.title }));
   const nav = h("nav", { class: "nav" }, shown.map(link),
     rest.length ? h("a", { href: "#", class: rest.some(p => p.id === page.id) ? "on" : "", onclick: ev => { ev.preventDefault(); moreSheet(rest); } }, icon("more"), h("span", { text: "More" })) : null);
   const side = h("aside", { class: "side" }, h("div", { class: "brand" }, h("img", { src: "/icon-192.png", alt: "" }), h("span", { text: S.org })), nav,
@@ -328,15 +344,68 @@ function render() {
 window.addEventListener("hashchange", render);
 window.matchMedia("(max-width: 860px)").addEventListener("change", render);
 
+/* ---------------- native-app behaviour ---------------- */
+function tabGo(ev, p, start) {
+  if (!window.matchMedia("(max-width: 860px)").matches) return;
+  ev.preventDefault();
+  const cur = (location.hash || "").replace(/^#\/?/, "") || start.id;
+  if (cur === p.id) return;
+  if (navigator.vibrate) navigator.vibrate(8);
+  const url = "#/" + p.id;
+  if (cur === start.id) location.hash = url;               // first tab -> another tab: one step forward
+  else if (p.id === start.id) history.back();              // any tab -> first tab: step back, so Back always lands on the first tab
+  else { history.replaceState(null, "", url); render(); }  // tab -> tab: no history pile-up
+}
+
+/* Material ripple on buttons, tabs and list rows */
+document.addEventListener("pointerdown", ev => {
+  const el = ev.target.closest && ev.target.closest(".btn,.nav a,.avbtn,.seg button,.sheet-list a,.dlg-x,.cred");
+  if (!el || el.disabled) return;
+  const r = el.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2;
+  const rip = document.createElement("span");
+  rip.className = "ripple";
+  rip.style.cssText = `width:${d}px;height:${d}px;left:${ev.clientX - r.left - d / 2}px;top:${ev.clientY - r.top - d / 2}px`;
+  el.append(rip);
+  rip.addEventListener("animationend", () => rip.remove());
+  if (el.classList.contains("btn") && navigator.vibrate) navigator.vibrate(6);
+}, { passive: true });
+
+/* top app bar gets a tonal tint once the page is scrolled */
+window.addEventListener("scroll", () => { const hd = document.querySelector(".head"); if (hd) hd.classList.toggle("scrolled", window.scrollY > 4); }, { passive: true });
+
+/* pull down to refresh (touch screens, only at the top of the page, not while the camera is on) */
+(function () {
+  let y0 = 0, pull = 0, on = false;
+  const ind = h("div", { class: "ptr", "aria-hidden": "true" }, h("div", { class: "spin" }));
+  document.addEventListener("DOMContentLoaded", () => document.body.append(ind));
+  if (document.readyState !== "loading") document.body.append(ind);
+  document.addEventListener("touchstart", e => {
+    on = window.scrollY <= 0 && e.touches.length === 1 && window.matchMedia("(max-width: 860px)").matches && !document.querySelector("dialog[open]") && !e.target.closest(".cam");
+    y0 = e.touches[0].clientY; pull = 0;
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    if (!on) return;
+    pull = Math.max(0, Math.min(110, (e.touches[0].clientY - y0) * 0.5));
+    ind.style.transform = `translate(-50%, ${pull - 44}px) rotate(${pull * 4}deg)`;
+    ind.style.opacity = String(Math.min(1, pull / 50));
+  }, { passive: true });
+  document.addEventListener("touchend", () => {
+    if (!on) return;
+    on = false;
+    if (pull > 58) { ind.classList.add("busy"); setTimeout(() => { render(); ind.classList.remove("busy"); ind.style.opacity = "0"; ind.style.transform = "translate(-50%, -44px)"; }, 350); }
+    else { ind.style.opacity = "0"; ind.style.transform = "translate(-50%, -44px)"; }
+  }, { passive: true });
+})();
+
 function moreSheet(rest) {
   let ref;
-  ref = openDialog("More", h("div", { class: "sheet-list" }, rest.map(p => h("a", { href: "#/" + p.id, onclick: () => ref.close() }, icon(p.icon), h("span", { text: p.title })))), []);
+  ref = openDialog("More", h("div", { class: "sheet-list" }, rest.map(p => h("a", { href: "#/" + p.id, onclick: ev => { ev.preventDefault(); ref.close(); setTimeout(() => { location.hash = "#/" + p.id; }, 150); } }, icon(p.icon), h("span", { text: p.title })))), []);
 }
 function accountSheet() {
   openDialog("Account", h("div", {}, h("div", { class: "person", style: "margin-bottom:6px" }, h("span", { class: "av", text: initials(S.me.name) }),
     h("div", {}, h("div", { text: S.me.name }), h("div", { class: "small mut", text: S.me.user_id + "  \u00b7  " + S.me.role })))), [
-    { label: "Change password", kind: "ghost", run: () => { setTimeout(passwordDialog, 60); } },
-    { label: "Log out", kind: "danger", run: () => { setTimeout(logout, 60); } },
+    { label: "Change password", kind: "ghost", run: () => { setTimeout(passwordDialog, 150); } },
+    { label: "Log out", kind: "danger", run: () => { setTimeout(logout, 150); } },
   ]);
 }
 
@@ -405,7 +474,7 @@ async function pageMe(root) {
     h("div", { class: "row small mut", style: "margin:4px 0 14px" }, (d.student.branch ? d.student.branch + "  \u00b7  " : "") + "Counting since " + niceDate(d.start)),
     h("div", { class: "big" + (t && t.status === "present" ? " ok" : ""), style: "margin-bottom:14px" }, h("div", {}, h("b", { text: "Today: " }), t ? [statusBadge(t.status), "  Entry ", t12(t.entry), "   Exit ", t12(t.exit)] : "-")),
     summaryView(d)),
-    can("apply_leave") ? h("a", { class: "btn fab", href: "#/leaves", text: "Apply for leave" }) : null);
+    can("apply_leave") ? h("a", { class: "btn fab", href: "#/leaves" }, icon("calendar"), h("span", { text: "Apply for leave" })) : null);
 }
 
 /* ---------------- live attendance camera ---------------- */
@@ -589,7 +658,7 @@ async function pageStudents(root) {
   }
   put(root, h("div", { class: "card" }, h("div", { class: "row", style: "margin-bottom:12px" }, search, count, trainedBadge,
     h("span", { class: "right row" }, edit ? [h("button", { class: "btn ghost", text: "Train model", onclick: async () => { try { const r = await api("/api/train", { body: {}, timeout: 240000 }); toast(r.msg, r.ok ? "ok" : ""); await load(); } catch (e) { fail(e); } } }),
-      h("button", { class: "btn fab", text: "+ Add student", onclick: addDialog })] : null)), body));
+      h("button", { class: "btn fab", onclick: addDialog }, icon("plus"), h("span", { text: "Add student" }))] : null)), body));
   await load();
 }
 
@@ -740,7 +809,7 @@ async function pageUsers(root) {
         h("td", { class: "act" }, h("button", { class: "btn ghost sm", text: "Access", onclick: () => editDialog(u) }), h("button", { class: "btn ghost sm", text: "Reset password", onclick: () => reset(u).catch(fail) }),
           u.user_id === S.me.user_id ? null : h("button", { class: "btn danger sm", text: "Delete", onclick: () => remove(u).catch(fail) })))))));
   }
-  put(root, h("div", { class: "card" }, h("div", { class: "row", style: "margin-bottom:12px" }, h("h2", { text: "Everyone who can sign in" }), h("button", { class: "btn fab", text: "+ Add user", onclick: addDialog })),
+  put(root, h("div", { class: "card" }, h("div", { class: "row", style: "margin-bottom:12px" }, h("h2", { text: "Everyone who can sign in" }), h("button", { class: "btn fab", onclick: addDialog }, icon("plus"), h("span", { text: "Add user" }))),
     h("p", { class: "small mut", style: "margin-bottom:10px", text: "Each person has a User ID and a password. Passwords are stored scrambled, so they cannot be read back. When you add someone, or reset a password, the new password is shown once for you to hand over." }), body));
   await load();
 }

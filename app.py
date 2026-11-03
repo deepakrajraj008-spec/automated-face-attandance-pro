@@ -1447,8 +1447,8 @@ def cloud_sync_now():
 # ----------------------------------------------------------------------------
 # Pages, app install files
 # ----------------------------------------------------------------------------
-def make_icon(size):
-    img = np.full((size, size, 3), (214, 87, 36), np.uint8)
+def _draw_icon(size):
+    img = np.full((size, size, 3), (229, 70, 79), np.uint8)
     white, c = (255, 255, 255), size // 2
     t, m, n = max(2, size // 24), int(size * 0.2), int(size * 0.16)
     for x, y, dx, dy in [(m, m, 1, 1), (size - m, m, -1, 1), (m, size - m, 1, -1), (size - m, size - m, -1, -1)]:
@@ -1456,12 +1456,25 @@ def make_icon(size):
         cv2.line(img, (x, y), (x, y + dy * n), white, t)
     cv2.circle(img, (c, int(size * 0.42)), int(size * 0.12), white, -1)
     cv2.ellipse(img, (c, int(size * 0.74)), (int(size * 0.2), int(size * 0.16)), 0, 180, 360, white, -1)
+    return img
+
+
+def make_icon(size, maskable=False):
+    """Normal icon, or a maskable one: same picture shrunk into the centre 'safe zone' on a full-bleed background,
+    so Android can crop it to a circle or rounded square without cutting the drawing."""
+    if not maskable:
+        return cv2.imencode(".png", _draw_icon(size))[1].tobytes()
+    img = np.full((size, size, 3), (229, 70, 79), np.uint8)
+    inner = int(size * 0.66)
+    off = (size - inner) // 2
+    img[off:off + inner, off:off + inner] = _draw_icon(inner)
     return cv2.imencode(".png", img)[1].tobytes()
 
 
-ICONS = {192: make_icon(192), 512: make_icon(512)}
+ICONS = {180: make_icon(180), 192: make_icon(192), 512: make_icon(512)}
+MASKABLE = {192: make_icon(192, True), 512: make_icon(512, True)}
 SW = """
-const OFFLINE = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui,sans-serif;max-width:480px;margin:40px auto;padding:0 20px"><h2>The server is offline</h2><p>It may be restarting or waking up. Wait a minute and reload.</p><p><button onclick="location.reload()" style="padding:10px 18px;font-size:16px">Reload</button></p>';
+const OFFLINE = '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><style>body{font-family:Roboto,system-ui,sans-serif;margin:0;min-height:100vh;display:grid;place-items:center;background:#fcf8ff;color:#1c1b20;text-align:center;padding:24px;box-sizing:border-box}@media(prefers-color-scheme:dark){body{background:#131318;color:#e5e1e9}}p{color:#6b6975;max-width:320px;margin:8px auto 24px;line-height:1.5}button{font:500 15px Roboto,system-ui,sans-serif;border:0;border-radius:26px;padding:0 32px;height:52px;background:#4f46e5;color:#fff}</style><div><h2 style="font-weight:400;font-size:24px;margin:0">Can\u2019t reach the server</h2><p>It may be waking up or you may be offline. Trying again automatically.</p><button onclick="location.reload()">Try again</button></div><script>setTimeout(function(){location.reload()},7000)</script>';
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
@@ -1483,8 +1496,10 @@ def index():
 def manifest():
     data = {"id": "/", "name": "Face Attendance", "short_name": "Attendance", "description": "Face recognition attendance with entry and exit times and leave.",
             "start_url": "/", "scope": "/", "display": "standalone", "orientation": "any", "lang": "en", "categories": ["education", "productivity"],
-            "background_color": "#f4f5f8", "theme_color": "#4f46e5",
-            "icons": [{"src": f"/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png", "purpose": "any maskable"} for n in ICONS],
+            "background_color": "#fcf8ff", "theme_color": "#fcf8ff",
+            "prefer_related_applications": False,
+            "icons": [{"src": f"/icon-{n}.png", "sizes": f"{n}x{n}", "type": "image/png", "purpose": "any"} for n in (192, 512)]
+                     + [{"src": f"/icon-maskable-{n}.png", "sizes": f"{n}x{n}", "type": "image/png", "purpose": "maskable"} for n in MASKABLE],
             "shortcuts": [{"name": "Live camera", "url": "/#/live"}, {"name": "My attendance", "url": "/#/me"}, {"name": "Leave", "url": "/#/leaves"}]}
     return Response(json.dumps(data), mimetype="application/manifest+json")
 
@@ -1493,7 +1508,12 @@ def manifest():
 def assetlinks():
     """Lets an Android app made from this site (PWABuilder / Bubblewrap) open it without a browser address bar."""
     pkg = os.environ.get("ANDROID_PACKAGE", "").strip()
-    prints = [x.strip() for x in os.environ.get("ANDROID_SHA256", "").split(",") if x.strip()]
+    # accept fingerprints with or without colons, any case, separated by commas or spaces
+    prints = []
+    for x in re.split(r"[,\s]+", os.environ.get("ANDROID_SHA256", "")):
+        x = x.strip().replace(":", "").upper()
+        if len(x) == 64:
+            prints.append(":".join(x[i:i + 2] for i in range(0, 64, 2)))
     data = [{"relation": ["delegate_permission/common.handle_all_urls"],
              "target": {"namespace": "android_app", "package_name": pkg, "sha256_cert_fingerprints": prints}}] if pkg and prints else []
     return Response(json.dumps(data), mimetype="application/json")
@@ -1504,6 +1524,15 @@ def service_worker():
     r = Response(SW, mimetype="application/javascript")
     r.headers["Service-Worker-Allowed"] = "/"
     r.headers["Cache-Control"] = "no-cache"
+    return r
+
+
+@app.get("/icon-maskable-<int:size>.png")
+def icon_maskable(size):
+    if size not in MASKABLE:
+        abort(404)
+    r = Response(MASKABLE[size], mimetype="image/png")
+    r.headers["Cache-Control"] = "public, max-age=86400"
     return r
 
 
