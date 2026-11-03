@@ -400,9 +400,9 @@ def users_create():
             return jsonify(error="That student already has a login."), 400
     else:
         sid = None
-    password = body.get("password") or make_password()
-    if len(password) < 6:
-        return jsonify(error="Password must be at least 6 characters."), 400
+    password = str(body.get("password") or "") or make_password()
+    if len(password) < 6 or len(password) > 128:
+        return jsonify(error="Password must be 6 to 128 characters."), 400
     perms = body.get("perms") if isinstance(body.get("perms"), list) else ROLE_PRESETS[role]
     create_user(conn, uid, name, role, password, perms, sid)
     conn.commit()
@@ -444,7 +444,10 @@ def users_reset(uid):
     conn = db()
     if not conn.execute("SELECT 1 FROM users WHERE user_id=?", (uid,)).fetchone():
         return jsonify(error="User not found."), 404
-    password = make_password()
+    body = request.get_json(silent=True) or {}
+    password = str(body.get("password") or "") or make_password()
+    if len(password) < 6 or len(password) > 128:
+        return jsonify(error="Password must be 6 to 128 characters."), 400
     conn.execute("UPDATE users SET pwd_hash=?, pwv=pwv+1 WHERE user_id=?", (generate_password_hash(password), uid))
     conn.commit()
     return jsonify(ok=True, user_id=uid, password=password)
@@ -746,6 +749,8 @@ def students_add():
         return jsonify(error=f"Student limit reached ({s['student_limit']}). Raise the limit in Settings or remove a student."), 400
     if roll and conn.execute("SELECT 1 FROM students WHERE roll=?", (roll,)).fetchone():
         return jsonify(error="That roll number already exists."), 400
+    if body.get("create_login") and body.get("password") and not (6 <= len(str(body.get("password"))) <= 128):
+        return jsonify(error="Password must be 6 to 128 characters."), 400
     joined = valid_date(body.get("joined")) or local_now(s).date().isoformat()
     cur = conn.execute("INSERT INTO students(name,roll,branch,joined,created) VALUES(?,?,?,?,?)",
                        (name, roll, branch, joined, time.time()))
@@ -755,7 +760,7 @@ def students_add():
         uid = clean_user_id(body.get("user_id") or roll or f"s{sid}") or f"s{sid}"
         while conn.execute("SELECT 1 FROM users WHERE user_id=?", (uid,)).fetchone():
             uid = f"{uid[:26]}{secrets.randbelow(900) + 100}"
-        pwd = make_password()
+        pwd = str(body.get("password") or "") or make_password()
         create_user(conn, uid, name, "student", pwd, ROLE_PRESETS["student"], sid)
         login = {"user_id": uid, "password": pwd}
     conn.commit()
@@ -1563,6 +1568,18 @@ if os.environ.get("ADMIN_PASSWORD") and cloud["state"] not in ("starting", "fail
     if not _c.execute("SELECT COUNT(*) FROM users").fetchone()[0]:
         create_user(_c, "admin", "Administrator", "admin", os.environ["ADMIN_PASSWORD"])
         _c.commit()
+    _c.close()
+# Locked out? Set RESET_ADMIN_PASSWORD on the server, restart, sign in as admin, then REMOVE the setting.
+_rp = os.environ.get("RESET_ADMIN_PASSWORD", "")
+if _rp and 6 <= len(_rp) <= 128 and cloud["state"] not in ("starting", "failed"):
+    _c = connect()
+    _row = (_c.execute("SELECT user_id FROM users WHERE user_id='admin'").fetchone()
+            or _c.execute("SELECT user_id FROM users WHERE role='admin' ORDER BY created LIMIT 1").fetchone())
+    if _row:
+        _c.execute("UPDATE users SET pwd_hash=?, pwv=pwv+1, active=1 WHERE user_id=?", (generate_password_hash(_rp), _row["user_id"]))
+        _c.commit()
+        touch()
+        print(f"RESET_ADMIN_PASSWORD applied to '{_row['user_id']}'. Remove that setting now.", flush=True)
     _c.close()
 train_model()
 if cloud["state"] != "off":

@@ -49,6 +49,17 @@ person the admin ticks which features they may use:
 Presets: **Admin** (everything), **Teacher** (live camera, reports, edit attendance, approve leave),
 **Student** (own attendance, apply for leave). Any of them can be changed per person.
 
+## Forgot the admin password
+
+On the server (Render: **Environment** tab) add `RESET_ADMIN_PASSWORD` with a new password of your choice (6 or more characters), save, and let it
+redeploy. Sign in as **admin** with that password. Then **delete the setting again** and change the password in the app (**Password** button),
+otherwise every restart sets it back.
+
+## Custom passwords
+
+When you add a user, add a student with a login, create a login for a student, or reset a password, you can type the password yourself
+(6 to 128 characters) or press **Make a password**. Leave the box empty and the app makes one and shows it once.
+
 ## How the features work
 
 - **Entry and exit time.** The first recognition of the day is the entry. In Auto mode a later sighting at least
