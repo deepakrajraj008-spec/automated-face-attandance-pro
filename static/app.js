@@ -359,7 +359,7 @@ function tabGo(ev, p, start) {
 
 /* Material ripple on buttons, tabs and list rows */
 document.addEventListener("pointerdown", ev => {
-  const el = ev.target.closest && ev.target.closest(".btn,.nav a,.avbtn,.seg button,.sheet-list a,.dlg-x,.cred");
+  const el = ev.target.closest && ev.target.closest(".btn,.nav a,.avbtn,.seg button,.sheet-list a,.dlg-x,.cred,.mitem:not(.static),.sheet-acts button");
   if (!el || el.disabled) return;
   const r = el.getBoundingClientRect(), d = Math.max(r.width, r.height) * 2;
   const rip = document.createElement("span");
@@ -407,6 +407,34 @@ function accountSheet() {
     { label: "Change password", kind: "ghost", run: () => { setTimeout(passwordDialog, 150); } },
     { label: "Log out", kind: "danger", run: () => { setTimeout(logout, 150); } },
   ]);
+}
+
+/* A password box with a "Make a password" button. Empty means: the server makes one. */
+function passwordBox(hintText) {
+  const input = h("input", { placeholder: "Leave empty to make one for me", autocomplete: "new-password", autocapitalize: "none", spellcheck: "false" });
+  const c = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const gen = h("button", { class: "btn ghost sm", type: "button", text: "Make a password", onclick: () => { input.value = Array.from(crypto.getRandomValues(new Uint8Array(10)), x => c[x % c.length]).join(""); } });
+  return { input, el: h("div", {}, field("Password", input, hintText || "At least 6 characters. Leave empty and one is made for you."), h("div", { class: "row", style: "margin:-4px 0 10px" }, gen)) };
+}
+
+/* ---------------- Android-style lists (phones) ---------------- */
+function isPhone() { return window.matchMedia("(max-width: 860px)").matches; }
+/* One row: round avatar, title, grey line(s) under it, a chip on the right. Tap opens it (or a sheet of actions). */
+function mlist(items) {
+  return h("div", { class: "mlist" }, items.map(it => {
+    const inner = [it.av ? h("span", { class: "av", text: it.av }) : null,
+      h("span", { class: "mbody" }, h("span", { class: "mt", text: it.title }), it.sub ? h("span", { class: "ms", text: it.sub }) : null, it.sub2 ? h("span", { class: "ms", text: it.sub2 }) : null),
+      it.trail ? h("span", { class: "mtrail" }, it.trail) : null];
+    return it.onTap ? h("button", { class: "mitem", type: "button", onclick: it.onTap }, inner) : h("div", { class: "mitem static" }, inner);
+  }));
+}
+/* The actions of a row, as an Android bottom sheet. */
+function actionSheet(title, subtitle, actions) {
+  let ref;
+  const list = actions.filter(Boolean);
+  const body = h("div", {}, subtitle ? h("div", { class: "small mut", style: "margin:-4px 0 8px", text: subtitle }) : null,
+    h("div", { class: "sheet-acts" }, list.map(a => h("button", { type: "button", class: a.kind || "", onclick: () => { ref.close(); setTimeout(a.run, 160); } }, a.label))));
+  ref = openDialog(title, body, []);
 }
 
 /* On a phone every table is shown as a list of cards. This copies each column heading onto its cells. */
@@ -457,6 +485,7 @@ async function pageDashboard(root) {
 
 /* ---------------- a student's own page ---------------- */
 function historyTable(rows) {
+  if (isPhone()) return mlist(rows.map(r => ({ title: niceDate(r.date), sub: r.entry ? t12(r.entry) + " \u2013 " + (r.exit ? t12(r.exit) : "still in") : "No attendance", trail: statusBadge(r.status) })));
   return h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Date", "Status", "Entry", "Exit"].map(x => h("th", { text: x }))),
     rows.map(r => h("tr", {}, h("td", { text: niceDate(r.date) }), h("td", {}, statusBadge(r.status)), h("td", { text: t12(r.entry) }), h("td", { text: t12(r.exit) })))));
 }
@@ -516,6 +545,10 @@ async function pageLive(root) {
   const btn = h("button", { class: "btn", text: "Start camera" });
   async function refresh() {
     const d = await api("/api/attendance/today");
+    if (isPhone()) {
+      list.replaceChildren(d.rows.length ? mlist(d.rows.map(r => ({ av: initials(r.name), title: r.name, sub: r.roll || "", sub2: t12(r.entry) + " \u2013 " + (r.exit ? t12(r.exit) : "still in") + (r.duration ? "  \u00b7  " + r.duration : "") }))) : h("div", { class: "empty", text: "Nobody has been marked yet today." }));
+      return d;
+    }
     list.replaceChildren(d.rows.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Name", "Entry", "Exit", "Time in"].map(x => h("th", { text: x }))),
       d.rows.map(r => h("tr", {}, h("td", {}, h("div", {}, r.name), h("div", { class: "small mut", text: r.roll })), h("td", { text: t12(r.entry) }), h("td", { text: t12(r.exit) }), h("td", { text: r.duration || "-" }))))) : h("div", { class: "empty", text: "Nobody has been marked yet today." }));
     return d;
@@ -605,11 +638,12 @@ async function pageStudents(root) {
     const f = { name: h("input", { placeholder: "Full name" }), roll: h("input", { placeholder: "Roll number" }), branch: h("input", { placeholder: "Branch or class" }),
       joined: h("input", { type: "date", value: today() }), uid: h("input", { placeholder: "Leave empty to use the roll number", autocapitalize: "none" }) };
     const mk = h("input", { type: "checkbox", checked: true });
+    const pw = passwordBox("Optional. Leave empty and one is made for you.");
     openDialog("Add a student", h("div", {}, h("div", { class: "fields" }, field("Name", f.name), field("Roll number", f.roll), field("Branch / class", f.branch), field("Joined on", f.joined, "Attendance is counted from this date")),
-      h("label", { class: "check", style: "margin-top:6px" }, mk, "Also create a login (User ID and password) for this student"), field("User ID for the login", f.uid)), [
+      h("label", { class: "check", style: "margin-top:6px" }, mk, "Also create a login (User ID and password) for this student"), field("User ID for the login", f.uid), pw.el), [
       { label: "Cancel", kind: "ghost" },
       { label: "Add student", run: async () => {
-        const r = await api("/api/students", { body: { name: f.name.value, roll: f.roll.value, branch: f.branch.value, joined: f.joined.value, create_login: mk.checked, user_id: f.uid.value } });
+        const r = await api("/api/students", { body: { name: f.name.value, roll: f.roll.value, branch: f.branch.value, joined: f.joined.value, create_login: mk.checked, user_id: f.uid.value, password: pw.input.value || undefined } });
         await load();
         const st = data.students.find(s => s.id === r.id);
         const next = () => { if (edit) enrolDialog(st, load); };
@@ -629,10 +663,11 @@ async function pageStudents(root) {
   }
   function loginDialog(st) {
     const uid = h("input", { value: (st.roll || "").toLowerCase(), autocapitalize: "none" });
-    openDialog("Create a login for " + st.name, field("User ID", uid, "3 to 32 letters, numbers, dot, dash or underscore. A password is made for you."), [
+    const pw = passwordBox();
+    openDialog("Create a login for " + st.name, h("div", {}, field("User ID", uid, "3 to 32 letters, numbers, dot, dash or underscore."), pw.el), [
       { label: "Cancel", kind: "ghost" },
       { label: "Create login", run: async () => {
-        const r = await api("/api/users", { body: { user_id: uid.value, name: st.name, role: "student", student_id: st.id } });
+        const r = await api("/api/users", { body: { user_id: uid.value, name: st.name, role: "student", student_id: st.id, password: pw.input.value || undefined } });
         await load(); showCredentials(st.name, r.user_id, r.password);
       } },
     ]);
@@ -645,6 +680,20 @@ async function pageStudents(root) {
     count.textContent = `${data.students.length} / ${data.limit} students`;
     trainedBadge.replaceChildren(badge(data.trained ? "Model trained" : "Model not trained", data.trained ? "ok" : "warn"));
     const rows = data.students.filter(s => !q || s.name.toLowerCase().includes(q) || (s.roll || "").toLowerCase().includes(q));
+    if (isPhone()) {
+      body.replaceChildren(rows.length ? mlist(rows.map(s => ({
+        av: initials(s.name), title: s.name, sub: [s.roll || "no roll number", s.branch].filter(Boolean).join("  \u00b7  "),
+        sub2: s.login ? "Login: " + s.login : "No login yet",
+        trail: [badge(s.photos + " photos", s.photos ? "ok" : "warn"), s.active ? null : badge("Inactive", "bad")],
+        onTap: () => actionSheet(s.name, s.roll || "", [
+          canView ? { label: "View attendance", run: () => studentSummaryDialog(s).catch(fail) } : null,
+          edit ? { label: "Enrol face", run: () => enrolDialog(s, load) } : null,
+          edit ? { label: "Edit details", run: () => editDialog(s) } : null,
+          edit && !s.login && can("manage_users") ? { label: "Create login", run: () => loginDialog(s) } : null,
+          edit ? { label: "Delete student", kind: "danger", run: () => remove(s).catch(fail) } : null]),
+      }))) : h("div", { class: "empty", text: data.students.length ? "No student matches your search." : "No students yet. Press Add student." }));
+      return;
+    }
     body.replaceChildren(rows.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Student", "Branch", "Photos", "Login", "Status", ""].map(x => h("th", { text: x }))),
       rows.map(s => h("tr", {},
         h("td", {}, h("div", { class: "person" }, h("span", { class: "av", text: initials(s.name) }), h("div", {}, h("div", { text: s.name }), h("div", { class: "small mut", text: s.roll || "no roll number" })))),
@@ -675,6 +724,20 @@ async function pageReports(root) {
     const d = await api("/api/attendance?" + query());
     csv.href = "/api/attendance/export.csv?" + query();
     info.textContent = `${d.rows.length} row(s) from ${niceDate(d.start)} to ${niceDate(d.end)}`;
+    if (isPhone()) {
+      const out = [];
+      let last = "";
+      d.rows.forEach(r => {
+        if (r.date !== last) { last = r.date; out.push(h("div", { class: "mgroup", text: niceDate(r.date) })); }
+        const times = r.entry ? t12(r.entry) + " \u2013 " + (r.exit ? t12(r.exit) : "still in") + (r.duration ? "  \u00b7  " + r.duration : "") : "No attendance";
+        out.push(mlist([{ av: initials(r.name), title: r.name, sub: [r.roll, r.branch].filter(Boolean).join("  \u00b7  "), sub2: times, trail: statusBadge(r.status),
+          onTap: edit ? () => actionSheet(r.name, niceDate(r.date), [
+            { label: "Edit times", run: () => manual(r) },
+            r.entry ? { label: "Remove record", kind: "danger", run: async () => { if (await confirmBox("Remove attendance", `Remove ${r.name}'s record for ${niceDate(r.date)}?`, "Remove")) { await api(`/api/attendance/${r.student_id}/${r.date}`, { method: "DELETE" }); load().catch(fail); } } } : null]) : null }]));
+      });
+      body.replaceChildren(d.rows.length ? h("div", {}, out) : h("div", { class: "empty", text: "No records for these filters." }));
+      return;
+    }
     body.replaceChildren(d.rows.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Date", "Student", "Branch", "Entry", "Exit", "Time in", "Status", ""].map(x => h("th", { text: x }))),
       d.rows.map(r => h("tr", {}, h("td", { class: "nowrap", text: niceDate(r.date) }), h("td", {}, h("div", { class: "who2" }, h("div", { text: r.name }), h("div", { class: "small mut", text: r.roll }))), h("td", { text: r.branch || "-" }),
         h("td", { text: t12(r.entry) }), h("td", { text: t12(r.exit) }), h("td", { text: r.duration || "-" }), h("td", {}, statusBadge(r.status)),
@@ -707,6 +770,19 @@ async function pageLeaves(root) {
     const all = await api("/api/leaves");
     const rows = all.filter(l => filter === "all" || l.status === filter);
     tabs.replaceChildren(...["pending", "approved", "rejected", "all"].map(k => h("button", { class: "btn sm " + (filter === k ? "" : "ghost"), text: k[0].toUpperCase() + k.slice(1) + (k === "pending" ? ` (${all.filter(l => l.status === "pending").length})` : ""), onclick: () => { filter = k; load().catch(fail); } })));
+    if (isPhone()) {
+      list.replaceChildren(rows.length ? mlist(rows.map(l => {
+        const dates = l.from === l.to ? niceDate(l.from) : niceDate(l.from) + " to " + niceDate(l.to);
+        const acts = staff ? [
+          l.status !== "approved" ? { label: "Approve", run: () => decide(l, "approved").catch(fail) } : null,
+          l.status !== "rejected" ? { label: "Reject", run: () => decide(l, "rejected").catch(fail) } : null,
+          { label: "Delete request", kind: "danger", run: async () => { if (await confirmBox("Delete request", "Delete this leave request?")) { await api(`/api/leaves/${l.id}`, { method: "DELETE" }); await load(); } } }]
+          : l.status === "pending" ? [{ label: "Cancel request", kind: "danger", run: async () => { await api(`/api/leaves/${l.id}`, { method: "DELETE" }); toast("Request cancelled"); await load(); } }] : [];
+        return { av: staff ? initials(l.name) : null, title: staff ? l.name : dates, sub: staff ? dates : (l.reason || "No reason given"), sub2: staff ? (l.reason || "No reason given") : (l.decided_by ? "by " + l.decided_by : ""),
+          trail: badge(l.status, l.status === "approved" ? "ok" : l.status === "rejected" ? "bad" : "warn"), onTap: acts.length ? () => actionSheet(staff ? l.name : dates, dates, acts) : null };
+      })) : h("div", { class: "empty", text: "Nothing here." }));
+      return;
+    }
     list.replaceChildren(rows.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, [staff ? "Student" : "", "Dates", "Reason", "Status", ""].map(x => h("th", { text: x }))),
       rows.map(l => h("tr", {}, staff ? h("td", {}, h("div", { text: l.name }), h("div", { class: "small mut", text: l.roll })) : h("td", {}),
         h("td", { class: "nowrap", text: l.from === l.to ? niceDate(l.from) : niceDate(l.from) + "  to  " + niceDate(l.to) }), h("td", { text: l.reason || "-" }),
@@ -790,16 +866,34 @@ async function pageUsers(root) {
       { label: "Save", run: async () => { await api(`/api/users/${encodeURIComponent(u.user_id)}`, { method: "PUT", body: { name: name.value, role: role.value, active: act.checked, perms: perms.get() } }); await load(); toast("Saved", "ok"); } },
     ], { wide: true });
   }
-  async function reset(u) {
-    if (!(await confirmBox("Reset password", `Make a new password for ${u.name} (${u.user_id})? The old password stops working and they are signed out.`, "Reset"))) return;
-    const r = await api(`/api/users/${encodeURIComponent(u.user_id)}/reset-password`, { body: {} });
-    showCredentials(u.name, r.user_id, r.password, "New password");
+  function reset(u) {
+    const pw = passwordBox("Type the new password, or leave it empty and one is made for you. The old password stops working and they are signed out.");
+    openDialog("Reset password for " + u.name, h("div", {}, h("p", { class: "small mut", style: "margin-bottom:10px", text: "User ID: " + u.user_id }), pw.el), [
+      { label: "Cancel", kind: "ghost" },
+      { label: "Reset password", run: async () => {
+        const r = await api(`/api/users/${encodeURIComponent(u.user_id)}/reset-password`, { body: { password: pw.input.value || undefined } });
+        showCredentials(u.name, r.user_id, r.password, "New password");
+      } },
+    ]);
+    return Promise.resolve();
   }
   async function remove(u) {
     if (!(await confirmBox("Delete user", `Delete the login ${u.user_id} (${u.name})? They can no longer sign in. A student's attendance records are kept.`))) return;
     await api(`/api/users/${encodeURIComponent(u.user_id)}`, { method: "DELETE" }); await load(); toast("User deleted");
   }
   function draw() {
+    if (isPhone()) {
+      body.replaceChildren(mlist(users.map(u => ({
+        av: initials(u.name), title: u.name, sub: "@" + u.user_id + "  \u00b7  " + u.role,
+        sub2: u.role === "admin" ? "Can use everything" : u.perms.length ? u.perms.map(p => SHORT[p] || p).join(", ") : "Nothing allowed yet",
+        trail: badge(u.active ? "Active" : "Blocked", u.active ? "ok" : "bad"),
+        onTap: () => actionSheet(u.name, "@" + u.user_id, [
+          { label: "Change access", run: () => editDialog(u) },
+          { label: "Reset password", run: () => reset(u).catch(fail) },
+          u.user_id === S.me.user_id ? null : { label: "Delete user", kind: "danger", run: () => remove(u).catch(fail) }]),
+      }))));
+      return;
+    }
     body.replaceChildren(h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, ["Person", "User ID", "Role", "Can use", "Status", ""].map(x => h("th", { text: x }))),
       users.map(u => h("tr", {},
         h("td", {}, h("div", { class: "person" }, h("span", { class: "av", text: initials(u.name) }), h("div", {}, h("div", { text: u.name }), u.student_name ? h("div", { class: "small mut", text: "Student " + (u.roll || "") }) : null))),
